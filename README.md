@@ -38,7 +38,7 @@
 在 macOS 或 Linux 准备 Python 3.12 和 uv，安装依赖并创建本地配置。 [uv 安装说明](https://docs.astral.sh/uv/)
 
 ```bash
-git clone https://github.com/carefreelove/RepoScout.git
+git clone https://github.com/Yuuze2/RepoScout.git
 cd RepoScout
 uv sync --frozen
 cp .env.example .env
