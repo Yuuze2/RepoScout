@@ -58,15 +58,25 @@ class RepositoryIndex:
 
     def legacy(self, run_id: str, repository: str, commit: str):
         """Index older line-numbered evidence without inventing missing source lines."""
-        for item in self.store.objects(run_id, "evidence"):
-            if item["kind"] != "file" or item["repository"] != repository or item["commit"] != commit:
-                continue
+        # Filter before decoding: modern evidence already has a complete document.
+        # Materialize and close the reader before add() starts a write transaction.
+        with self.store.connect() as db:
+            pending = db.execute("""
+                SELECT o.value FROM objects o
+                WHERE o.run_id=? AND o.kind='evidence'
+                  AND json_extract(o.value,'$.kind')='file'
+                  AND json_extract(o.value,'$.repository')=?
+                  AND json_extract(o.value,'$.commit')=?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM source_documents d
+                      WHERE d.repository=? AND d.commit_sha=?
+                        AND d.path=json_extract(o.value,'$.path') AND d.is_fragment=0
+                  )
+                ORDER BY o.key
+            """, (run_id, repository, commit, repository, commit)).fetchall()
+        for row in pending:
+            item = json.loads(row["value"])
             key = item["path"]
-            with self.store.connect() as db:
-                present = db.execute("SELECT 1 FROM source_documents WHERE repository=? AND commit_sha=? AND path=? AND is_fragment=0",
-                                     (repository, commit, key)).fetchone()
-            if present:
-                continue
             lines = [re.sub(r"^\d+: ", "", line) for line in item["content"].splitlines()]
             self.add(repository, commit, key, "\n".join(lines), item["retrieved_at"],
                      item["start_line"] or 1, fragment=True)
